@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Department Guest Lecture / FDP Management</title>
+
+  <!-- jsPDF for report generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg: rgba(255,255,255,0.8);
+      --card:#fff;
+      --accent:#1f6feb;
+      --muted:#666;
+    }
+
+    *{box-sizing:border-box}
+
+    /* Background image */
+    body{
+      margin:0;
+      font-family:Inter, system-ui, Arial, sans-serif;
+      background: url("image1.jpg") no-repeat center center fixed;
+      background-size: cover;
+      color:#111; 
+      line-height:1.4;
+    }
+
+    .overlay {
+      background: var(--bg);
+      min-height: 100vh;
+      padding-bottom: 30px;
+    }
+
+    header{
+      background:linear-gradient(90deg,var(--accent),#3aa7ff);
+      color:white; padding:18px 20px;
+    }
+    header h1{margin:0; font-size:1.2rem}
+
+    .container{
+      max-width:1000px;
+      margin:22px auto;
+      padding:0 16px;
+    }
+
+    .card{
+      background:var(--card);
+      padding:16px;
+      border-radius:12px;
+      box-shadow:0 6px 18px rgba(20,20,40,0.06);
+      margin-bottom:16px;
+    }
+
+    form{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+
+    label{
+      display:flex;
+      flex-direction:column;
+      font-size:0.85rem;
+      color:var(--muted);
+    }
+
+    input[type="text"], input[type="email"], input[type="date"]{
+      padding:8px 10px;
+      border:1px solid #e3e6ee;
+      border-radius:8px;
+      min-width:180px;
+    }
+
+    button{
+      background:var(--accent);
+      color:white; border:0;
+      padding:8px 12px; border-radius:8px;
+      cursor:pointer;
+    }
+    button:hover{opacity:0.95}
+
+    #eventsList .event{
+      padding:10px;
+      border:1px solid #eef2ff;
+      border-radius:8px;
+      margin-bottom:8px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+
+    .event .meta{font-size:0.9rem}
+    .event button{background:#0b5ed7; padding:6px 10px; border-radius:6px}
+
+    .two-col{display:flex; gap:12px}
+    .part-row{display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px dashed #f0f0f0;}
+    .part-row .name{flex:1}
+    .small{font-size:0.85rem; color:var(--muted)}
+
+    footer{max-width:1000px;margin:12px auto;text-align:center;color:var(--muted)}
+
+    @media (max-width:700px){
+      .two-col{flex-direction:column}
+      form{flex-direction:column; align-items:stretch}
+    }
+  </style>
+</head>
+<body>
+
+<div class="overlay">
+
+  <header>
+    <center><h1>VFSTR - DEPARTMENT OF COMPUTER APPLICATIONS</h1></center>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Create Event</h2>
+      <form id="eventForm">
+        <label>Topic <input type="text" id="topic" required></label>
+        <label>Resource Person <input type="text" id="resource" required></label>
+        <label>Date <input type="date" id="date" required></label>
+        <button type="submit">Create Event</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Events</h2>
+      <div id="eventsList"><p class="small">No events yet.</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Selected Event: <span id="selectedEventTitle">None</span></h2>
+      <div id="eventControls" style="display:none;">
+        <div class="two-col">
+          <div>
+            <h3>Register Participant</h3>
+            <form id="regForm">
+              <label>Name <input type="text" id="pname" required></label>
+              <label>Email <input type="email" id="pemail" required></label>
+              <button type="submit">Register</button>
+            </form>
+          </div>
+          <div>
+            <h3>Attendance</h3>
+            <button id="markAllPresent">Mark All Present</button>
+            <button id="clearAttendance">Clear Attendance</button>
+          </div>
+        </div>
+
+        <h3>Participants</h3>
+        <div id="participantsTable"></div>
+
+        <h3>Generate Report</h3>
+        <button id="generateReportBtn">Download Report (PDF)</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ⭐ UPDATED FOOTER WITH YOUR NAME ⭐ -->
+  <footer>
+    <small>
+      Built for departmental documentation • Stores data in browser (localStorage)
+      <br>
+      Designed by – <strong>K.Sai hima bindu</strong>
+      Designed by – <strong>S.Shiny glory</strong>
+      Designed by – <strong>M.Kishore nandan</strong>
+    </small>
+  </footer>
+
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const eventsKey = 'fdp_events_v1';
+
+  function uuid(){ return 'id-'+Math.random().toString(36).slice(2,10); }
+
+  function loadEvents(){
+    try { return JSON.parse(localStorage.getItem(eventsKey) || '[]'); }
+    catch(e){ localStorage.removeItem(eventsKey); return []; }
+  }
+
+  function saveEvents(evts){ localStorage.setItem(eventsKey, JSON.stringify(evts)); }
+
+  function renderEvents(){
+    const events = loadEvents();
+    const container = $('eventsList');
+    if(events.length===0){
+      container.innerHTML = '<p class="small">No events yet.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    events.forEach(ev=>{
+      const el = document.createElement('div');
+      el.className = 'event';
+      el.innerHTML = `
+        <div class="meta">
+          <strong>${escapeHtml(ev.topic)}</strong><br>
+          <span class="small">${escapeHtml(ev.resource)} • ${escapeHtml(ev.date)}</span>
+        </div>
+        <div>
+          <button data-id="${ev.id}" class="selectBtn">Open</button>
+          <button data-id="${ev.id}" class="deleteBtn" style="background:#e63946;margin-left:8px">Delete</button>
+        </div>
+      `;
+      container.appendChild(el);
+    });
+
+    document.querySelectorAll('.selectBtn').forEach(b=>b.onclick = ()=>selectEvent(b.dataset.id));
+    document.querySelectorAll('.deleteBtn').forEach(b=>b.onclick = ()=>{
+      if(!confirm('Delete this event and all its data?')) return;
+      const evts = loadEvents().filter(e=>e.id!==b.dataset.id);
+      if(selectedEventId === b.dataset.id) clearSelectedEvent();
+      saveEvents(evts);
+      renderEvents();
+    });
+  }
+
+  function clearSelectedEvent(){
+    $('selectedEventTitle').textContent = 'None';
+    $('eventControls').style.display = 'none';
+    $('participantsTable').innerHTML = '';
+    selectedEventId = null;
+  }
+
+  let selectedEventId = null;
+
+  function selectEvent(id){
+    const events = loadEvents();
+    const ev = events.find(e=>e.id===id);
+    if(!ev) return;
+    selectedEventId = id;
+
+    $('selectedEventTitle').textContent = `${ev.topic} (${ev.date})`;
+    $('eventControls').style.display = 'block';
+    renderParticipants(ev);
+  }
+
+  function renderParticipants(ev){
+    const container = $('participantsTable');
+    if(!ev.participants || ev.participants.length===0){
+      container.innerHTML = '<p class="small">No participants registered.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    ev.participants.forEach(p=>{
+      const row = document.createElement('div');
+      row.className = 'part-row';
+      row.innerHTML = `
+        <div class="name"><strong>${escapeHtml(p.name)}</strong>
+          <div class="small">${escapeHtml(p.email)}</div></div>
+        <div>
+          <label class="small">
+            Attendance: <input type="checkbox" data-pid="${p.id}" ${p.attendance ? 'checked' : ''}>
+          </label>
+        </div>
+        <div>
+          <button data-pid="${p.id}" class="fbBtn">Feedback</button>
+          <button data-pid="${p.id}" class="delP" style="background:#e63946;margin-left:6px">Remove</button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+
+    container.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+      cb.onchange = ()=>toggleAttendance(cb.dataset.pid, cb.checked);
+    });
+
+    container.querySelectorAll('.fbBtn').forEach(b=>{
+      b.onclick = ()=>openFeedbackModal(b.dataset.pid);
+    });
+
+    container.querySelectorAll('.delP').forEach(b=>{
+      b.onclick = ()=>{
+        if(!confirm('Remove participant?')) return;
+        removeParticipant(b.dataset.pid);
+      };
+    });
+  }
+
+  function toggleAttendance(pid, value){
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    if(!ev) return;
+    const p = ev.participants.find(pp=>pp.id===pid);
+    if(!p) return;
+    p.attendance = !!value;
+    saveEvents(evts);
+    renderParticipants(ev);
+  }
+
+  function removeParticipant(pid){
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    ev.participants = ev.participants.filter(pp=>pp.id!==pid);
+    saveEvents(evts);
+    renderParticipants(ev);
+  }
+
+  $('eventForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const topic = $('topic').value.trim();
+    const resource = $('resource').value.trim();
+    const date = $('date').value;
+    if(!topic || !resource || !date) return alert('Fill all fields');
+    const evts = loadEvents();
+    evts.push({ id: uuid(), topic, resource, date, participants: [] });
+    saveEvents(evts);
+    $('eventForm').reset();
+    renderEvents();
+  });
+
+  $('regForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    if(!selectedEventId) return alert('Select an event first');
+    const name = $('pname').value.trim();
+    const email = $('pemail').value.trim();
+    if(!name || !email) return alert('Enter name and email');
+
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    ev.participants.push({ id: uuid(), name, email, attendance:false, feedback:'' });
+    saveEvents(evts);
+    $('regForm').reset();
+    renderParticipants(ev);
+    renderEvents();
+  });
+
+  $('markAllPresent').onclick = ()=>{
+    if(!selectedEventId) return alert('Select event');
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    ev.participants.forEach(p=>p.attendance = true);
+    saveEvents(evts);
+    renderParticipants(ev);
+  };
+
+  $('clearAttendance').onclick = ()=>{
+    if(!selectedEventId) return alert('Select event');
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    ev.participants.forEach(p=>p.attendance = false);
+    saveEvents(evts);
+    renderParticipants(ev);
+  };
+
+  function openFeedbackModal(pid){
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    const p = ev.participants.find(pp=>pp.id===pid);
+    const fb = prompt(`Feedback for ${p.name}:`, p.feedback || '');
+    if(fb !== null){
+      p.feedback = fb.trim();
+      saveEvents(evts);
+      renderParticipants(ev);
+    }
+  }
+
+  $('generateReportBtn').onclick = ()=>{
+    if(!selectedEventId) return alert('Select event');
+    const evts = loadEvents();
+    const ev = evts.find(e=>e.id===selectedEventId);
+    const present = ev.participants.filter(p=>p.attendance).length;
+
+    let txt =
+`Department Guest Lecture / FDP Report
+
+Topic: ${ev.topic}
+Resource Person: ${ev.resource}
+Date: ${ev.date}
+
+Total Participants: ${ev.participants.length}
+Present: ${present}
+
+Participants:
+`;
+
+    ev.participants.forEach((p,i)=>{
+      txt += `${i+1}. ${p.name} (${p.email}) - ${p.attendance ? 'Present' : 'Absent'}\n`;
+      if(p.feedback) txt += `   Feedback: ${p.feedback}\n`;
+    });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const split = doc.splitTextToSize(txt, 180);
+    doc.setFontSize(11);
+    doc.text(split, 15, 20);
+    doc.save(`${ev.topic.replace(/[^\w\d\-]/g,'')}_report.pdf`);
+  };
+
+  function escapeHtml(str){
+    return String(str || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  renderEvents();
+</script>
+
+</body>
+</html>
